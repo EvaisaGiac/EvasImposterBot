@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Semiauto Imposter Bot
+// @name         Semiauto Imposter Bot 2
 // @namespace    jrwr.io
-// @version      1.0.0
+// @version      1.0.1
 // @description  Semiautomatic version from the Imposter Bot for Reddit's April Fools Day 2020.
-// @author       dimden (https://dimden.dev/), jrwr (http://jrwr.io/), px, qqii, NightHawkCanada
+// @author       dimden (https://dimden.dev/), jrwr (http://jrwr.io/), px, qqii, NightHawkCanada, Evaisa
 // @match        https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop
 // @match        https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop*
 // @match        https://gremlins-api.reddit.com/results?*
@@ -30,6 +30,7 @@ async function getRoom() {
         options: Array.from(doc.getElementsByTagName("gremlin-note")).map(e => [e.id, e.innerText])
     };
 };
+
 
 
 async function submitAnswer(token, id) {
@@ -99,7 +100,24 @@ async function play() {
 
 
     if (flag < 4){
-window.open("https://gremlins-api.reddit.com/room?nightmode=1","_self")
+        let is_open = false;
+
+        let elements = document.getElementsByTagName("gremlin-note");
+        for( var i=0,il = elements.length; i< il; i ++ ){
+            let label = ((elements[i].getAttribute("aria-label")).substring(19)).trim();
+            //console.log(label)
+            for (let x = 0; x < room.options.length; x++) {
+                let room_text = (room.options[x][1]).trim();
+                //console.log(room_text)
+                if(label == room_text){
+                    is_open = true;
+                    console.log("detected page already open")
+                }
+            }
+        }
+        if(!is_open){
+           window.open("https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop","_self")
+        }
             return 0;
     } else if (flag >= 4){
 
@@ -146,26 +164,28 @@ window.wins = []; window.loses = [];
 setInterval(async () => {
     let t0 = performance.now();
     let game = await play();
-    submitAnswerToDB(game[0].trim(), game[1], game[2]).then(
-        function (submit) {
-            let t1 = performance.now();
-            timing.push(t1 - t0);
-            game[0] = game[0].trim();
-            if(game[1] === "WIN") wins.push(game[0]);
-            else if(game[1] === "LOSE") loses.push(game[0]);
-            last = game[1];
-            Toastify({
-              text: game[1] + ": "+ game[0],
-              duration: 5000,
-              newWindow: true,
-              close: true,
-              gravity: "top", // `top` or `bottom`
-              position: 'left', // `left`, `center` or `right`
-              backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
-              stopOnFocus: false, // Prevents dismissing of toast on hover
-            }).showToast();
-        }
-    )
+    if(typeof game[0] != 'undefined' ){
+        submitAnswerToDB(game[0].trim(), game[1], game[2]).then(
+            function (submit) {
+                let t1 = performance.now();
+                timing.push(t1 - t0);
+                game[0] = game[0].trim();
+                if(game[1] === "WIN") wins.push(game[0]);
+                else if(game[1] === "LOSE") loses.push(game[0]);
+                last = game[1];
+                Toastify({
+                    text: game[1] + ": "+ game[0],
+                    duration: 5000,
+                    newWindow: true,
+                    close: true,
+                    gravity: "top", // `top` or `bottom`
+                    position: 'left', // `left`, `center` or `right`
+                    backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
+                    stopOnFocus: false, // Prevents dismissing of toast on hover
+                }).showToast();
+            }
+        )
+    }
 }, 1200)
 
 setInterval(() => {
