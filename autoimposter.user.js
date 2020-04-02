@@ -112,31 +112,6 @@ async function getRoom() {
 };
 
 
-async function submitReport(token, id) {
-    let our_body = "undefined=undefined&note_ids="+id+"&csrf_token="+token
-    let res = await (await fetch("https://gremlins-api.reddit.com/report_note", {
-        method: "post",
-        headers: {
-            'accept': 'gremlin/html',
-            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-            // 'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: our_body
-    })).text();
-
-    if(res.status == 429){
-        let body = new FormData();
-        body.append("undefined", "undefined");
-        body.append("note_id", id);
-        body.append("csrf_token", token);
-        res = await (await fetch("https://gremlins-api.reddit.com/submit_guess", {
-            method: "post",
-            body
-        })).text();
-    }
-    return JSON.parse(res);
-}
-
 
 async function submitAnswer(token, id) {
     let body = new FormData();
@@ -198,17 +173,11 @@ async function play() {
 
     // stuff for abusing report button, gets rate limited.
 
-   /* if (flag < 4){
-        let result = await submitReport(room.token, room.options[answer][0]);
 
-        return [room.options[answer][1], result.result, room];
-        window.open("https://gremlins-api.reddit.com/room?nightmode=1","_self")
-        return 0;
-    } else if (flag >= 4){*/
         let result = await submitAnswer(room.token, room.options[answer][0]);
 
         return [room.options[answer][1], result.result, room];
-   // }
+
 };
 
 async function submitAnswerToDB(answer, result, room) {
