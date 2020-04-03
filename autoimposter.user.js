@@ -1,12 +1,11 @@
 // ==UserScript==
-// @name         Imposter Bot
-// @namespace    jrwr.io
-// @version      1.1.?
-// @description  Imposter bot that compares answers to databases to find the right answer and automatically plays the game.
-// @author       dimden (https://dimden.dev/), jrwr (http://jrwr.io/), px, qqii, evaisa
-// @match        https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop
-// @match        https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop*
-// @match        https://gremlins-api.reddit.com/results?*
+// @name         Auto Imposter Bot
+// @namespace    evaisa.nl
+// @version      0.1
+// @description  Plays r/imposter for you
+// @author       mat,evaisa
+// @match        https://gremlins-api.reddit.com/*
+// @grant        none
 // ==/UserScript==
 
 document.getElementsByTagName("head")[0].insertAdjacentHTML(
@@ -17,28 +16,83 @@ let imported = document.createElement('script');
 imported.src = 'https://cdn.jsdelivr.net/npm/toastify-js';
 document.head.appendChild(imported);
 
+window.last = "INVALID";
+window.wins = []; window.loses = [];
+let timing = [];
 
-//const DETECTOR_URL = "https://detector.abra.me/?";
-//const ABRA_URL = "https://librarian.abra.me/check";
-const SPACESCIENCE_URL = "https://spacescience.tech/check.php?id=";
-const OCEAN_URL = "https://wave.ocean.rip/answers/answer?text=";
+async function checkAnswerOcean(element) {
+    const text = element.textContent.trim()
+    const r = await fetch('https://wave.ocean.rip/answers/answer?text=' + text)
+    const resp = await r.json()
+    element.isCorrect = true
+    if (resp.status === 404) {
+        element.style.opacity = 1
+        element.isCorrect = true
+        console.log("fuck")
+        return true
+    } else if (resp.answer.is_correct === false) {
+        element.isCorrect = false
+        element.style.opacity = .1
+        return false
+    }
+    element.isCorrect = true
+    element.style.opacity = 1
+    return true
+}
 
-async function checkExistingAbra(msgs) {
-    var myHeaders = new Headers();
-    myHeaders.append("Content-Type", "application/json");
+async function checkAnswersOcean(answerEls) {
+    const promises = []
+    for (const answerEl of answerEls) {
+        promises.push(checkAnswerOcean(answerEl))
+    }
+    await Promise.all(promises)
+    const correctAnswerEls = []
+    for (const answerEl of answerEls)
+        if (answerEl.isCorrect)
+            correctAnswerEls.push(answerEl)
+    return correctAnswerEls
+}
 
-    let raw = JSON.stringify({"texts": msgs});
+async function checkAnswerSpacescience(element) {
+    const id = element.id
+    try {
+        var r = await fetch('https://spacescience.tech/check.php?id=' + id)
+    } catch(e) {
+        return true
+    }
+    const resp = await r.json()
+    console.log(resp)
+    element.isCorrect = true
+    if (resp.slow === 'yes') return true
+    for (const item of Object.values(resp)) {
+        if (item.flag) {
+            if (item.result === 'LOSE') {
+                element.style.opacity = .1
+                element.isCorrect = false
+                return false
+            }
+            /*else {
+                element.isCorrect = true
+                element.style.opacity = 1
+                return false
+            }*/
+        }
+    }
+    return true
+}
 
-    let requestOptions = {
-        method: 'POST',
-        headers: myHeaders,
-        body: raw,
-        redirect: 'follow'
-    };
 
-    let json = await fetch(ABRA_URL, requestOptions)
-                         .then(response => response.json());
-    return json.results;
+async function checkAnswersSpacescience(answerEls) {
+    const promises = []
+    for (const answerEl of answerEls) {
+        promises.push(checkAnswerSpacescience(answerEl))
+    }
+    await Promise.all(promises)
+    const correctAnswerEls = []
+    for (const answerEl of answerEls)
+        if (answerEl.isCorrect)
+            correctAnswerEls.push(answerEl)
+    return correctAnswerEls
 }
 
 async function checkAnswersSneknet(answerEls) {
@@ -58,86 +112,122 @@ async function checkAnswersSneknet(answerEls) {
             if (index !== -1) possibleAnswers.splice(index, 1);
         }
     }
-
-    console.log(possibleAnswers)
-
     return possibleAnswers
 }
 
-async function checkExistingSpacescience(id) {
-    let requestOptions = {
-        method: 'GET',
-        redirect: 'follow'
-    };
 
-    let json = await fetch(SPACESCIENCE_URL+id, requestOptions)
-                         .then(response => response.json());
-
-    console.log(json);
-
-    for (let key in json) {
-        if (json[key].hasOwnProperty("flag")) {
-            if (json[key].flag = 1) {
-                console.log(json[key]);
-                switch(json[key].result) {
-                    /*case "WIN":
-                        return "known fake";
-                        Known bot data is completely unrealiable.
-                    */
-                    case "LOSE":
-                        return "known human";
-                }
-            }
-        }
-    }
-    return "unknown";
+async function checkAnswerAbraScore(element) {
+    const text = element.textContent.trim()
+    const r = await fetch('https://detector.abra.me/?' + text)
+    const resp = await r.json()
+    element.fake_probability = resp.fake_probability
+    return resp.fake_probability
 }
 
-async function checkExistingOcean(msg) {
-    let requestOptions = {
-        method: 'GET',
-        redirect: 'follow'
-    };
+async function getTopAbra(answerEls) {
+    const promises = []
+    for (const answerEl of answerEls) {
+        promises.push(checkAnswerAbraScore(answerEl))
+    }
+    var highestProbabilityEl
+    var highestProbabilityScore = -1
+    await Promise.all(promises)
 
-    let url = encodeURI(OCEAN_URL+(msg.trim()))
-
-    console.log(url)
-
-    let json = await fetch(url, requestOptions)
-                         .then(response => response.json());
-
-
-
-    if (json.status=200) {
-
-        if(json.message != "not found in database"){
-            console.log(json);
-            if (json.answer.is_correct) {
-                return "known fake";
-            } else {
-                return "known human";
-            }
+    for (const answerEl of answerEls) {
+        console.log(answerEl, answerEl.fake_probability)
+        if (answerEl.fake_probability > highestProbabilityScore) {
+            highestProbabilityEl = answerEl
+            highestProbabilityScore = answerEl.fake_probability
+            console.log('highestProbabilityEl', highestProbabilityEl)
         }
     }
-
-    return "unknown";
+    return highestProbabilityEl
 }
 
-async function getRoom() {
-    let res = await (await fetch("https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop")).text();
-    let parser = new DOMParser();
-    let doc = parser.parseFromString(res, "text/html");
+async function checkAnswersAbra(answerEls) {
+    const r = await fetch('https://librarian.abra.me/check', {
+        method: 'POST',
+        body: JSON.stringify({
+            texts: answerEls.map(answer => answer.innerHTML.trim()),
+        }),
+        headers: {
+            'content-type': 'application/json'
+        }
+    })
+    const resp = await r.json()
+    const possibleAnswers = []
+    for (let i = 0; i < answerEls.length; i++) {
+        if (resp.results[i] === 'unknown')
+            possibleAnswers.push(possibleAnswers)
+    }
+    return possibleAnswers
+}
 
-    return {
-        token: doc.getElementsByTagName("gremlin-app")[0].getAttribute("csrf"),
-        options: Array.from(doc.getElementsByTagName("gremlin-note")).map(e => [e.id, e.innerText])
-    };
-};
+async function skip() {
+    const csrf = document.getElementsByTagName('gremlin-app')[0].getAttribute('csrf')
+    const noteId = document.getElementsByTagName('gremlin-note')[0].id
+    const params = new URLSearchParams({
+        'undefined': 'undefined',
+        'csrf_token': csrf,
+        'note_ids': noteId
+    });
+    const body = params.toString()
+
+    await fetch(
+        'https://gremlins-api.reddit.com/report_note',
+        {
+            method: 'POST',
+            body,
+            headers: {
+                'content-type': 'application/x-www-form-urlencoded',
+                'accept': 'gremlin/html'
+            }
+        }
+    )
+    location.reload()
+
+}
+
+async function submitReport(element, doc) {
+    if (typeof(element) != "undefined"){
+        let our_body = "undefined=undefined&note_ids="+element.id+"&csrf_token="+doc.getElementsByTagName('gremlin-app')[0].getAttribute('csrf')
+        let res = await (await fetch("https://gremlins-api.reddit.com/report_note", {
+            method: "post",
+            headers: {
+                'accept': 'gremlin/html',
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                // 'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: our_body
+        })).text();
+    }
+   // console.log(JSON.parse(res))
+    setTimeout(() => {window.open("https://gremlins-api.reddit.com/results?prev_result=WIN&nightmode=1","_self")}, 500)
+    //window.open("https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop","_self");
+}
 
 
-async function submitReport(token, id) {
-    let our_body = "undefined=undefined&note_ids="+id+"&csrf_token="+token
-    let res = await (await fetch("https://gremlins-api.reddit.com/report_note", {
+function addSkipButton() {
+    const reportButtonEl = document.getElementsByTagName('gremlin-room')[0].shadowRoot.querySelector('gremlin-action')
+    const skipButtonEl = document.createElement('gremlin-action')
+    skipButtonEl.setAttribute('hollow', '')
+    skipButtonEl.setAttribute('type', '')
+    skipButtonEl.setAttribute('role', 'button')
+    reportButtonEl.parentNode.insertBefore(skipButtonEl, reportButtonEl.nextSibling);
+    skipButtonEl.textContent = 'Skip'
+
+    skipButtonEl.addEventListener('click', skip)
+}
+
+
+async function submitAnswer(element, doc) {
+
+    console.log(element.id)
+
+
+
+    let our_body = "undefined=undefined&note_id="+element.id+"&csrf_token="+doc.getElementsByTagName('gremlin-app')[0].getAttribute('csrf')
+    let res = await (await fetch("https://gremlins-api.reddit.com/submit_guess", {
         method: "post",
         headers: {
             'accept': 'gremlin/html',
@@ -147,102 +237,61 @@ async function submitReport(token, id) {
         body: our_body
     })).text();
 
-    return JSON.parse(res);
-}
+    console.log(JSON.parse(res))
 
 
-async function submitAnswer(token, id) {
-    let body = new FormData();
-    body.append("undefined", "undefined");
-    body.append("note_id", id);
-    body.append("csrf_token", token);
-    let res = await (await fetch("https://gremlins-api.reddit.com/submit_guess", {
-        method: "post",
-        body
-    })).text();
+    let result = JSON.parse(res);
 
-    return JSON.parse(res);
-}
-async function asyncForEach(array, callback) {
-    for (let index = 0; index < array.length; index++) {
-        await callback(array[index], index, array);
+
+    console.log(result)
+
+    let game = [element.innerText.trim(), result.result]
+
+
+
+    game[0] = game[0].trim();
+    if(game[1] === "WIN") wins.push(game[0]);
+    else if(game[1] === "LOSE") loses.push(game[0]);
+
+    if(game[1] === "WIN"){
+        Toastify({
+            text: game[1] + ": "+ game[0],
+            duration: 5000,
+            newWindow: true,
+            close: true,
+            gravity: "top", // `top` or `bottom`
+            position: 'left', // `left`, `center` or `right`
+            backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
+            stopOnFocus: false, // Prevents dismissing of toast on hover
+        }).showToast();
     }
+    else if(game[1] === "LOSE"){
+        Toastify({
+            text: game[1] + ": "+ game[0],
+            duration: 5000,
+            newWindow: true,
+            close: true,
+            gravity: "top", // `top` or `bottom`
+            position: 'left', // `left`, `center` or `right`
+            backgroundColor: "linear-gradient(to right, #e3392d, #6b110b)",
+            stopOnFocus: false, // Prevents dismissing of toast on hover
+        }).showToast();
+    }
+
+    play()
+
+
+
+   // return JSON.parse(res);
 }
 
+async function getDocument(/*res, elements*/) {
+    let res = await (await fetch("https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop")).text();
+    let parser = new DOMParser();
+    let doc = parser.parseFromString(res, "text/html");
 
-async function play() {
-    let room = await getRoom();
-    let answer = 0,
-        maxDetector = 0;
-
-    let answers = await checkAnswersSneknet(room.options)
-
-
-   // let abraP = checkExistingAbra(room.options.flatMap(x => x[0]));
-    let spacP = Promise.all(answers.flatMap(x => checkExistingSpacescience(x[0])));
-    let oceaP = Promise.all(answers.flatMap(x => checkExistingOcean(x[1])));
-  //  let detecP = Promise.all(room.options.flatMap(x => checkDetector(x[1])));
-
-    // cost of accuracy
-
-    let [space, ocean] = await Promise.all([spacP, oceaP]);
-
-    // console.table(abra);
-    // console.table(space);
-    // console.table(detector);
-
-     let flag = 0;
-
-    for (let i = 0; i < answers.length; i++) {
-        // o is id
-        // z is string
-        let [o, z] = answers[i];
-        if ( space[i] === "known fake" || ocean[i] == "known fake") {
-            answer = i;
-            break;
-        } else if ( space[i] === "known human" || ocean[i] == "known human") {
-            flag++;
-            continue;
-        } else if ( space[i] === "unknown" || ocean[i] == "unknown") {
-             answer = i;
-             /*if (detector[i] > maxDetector) {
-                 maxDetector = detector[i];
-                 answer = i;
-                 continue;
-             }*/
-        }
-    };
-
-    // stuff for abusing report button, gets rate limited.
-
-    if (flag < 4){
-        let result = await submitReport(room.token, room.options[answer][0]);
-
-        return [room.options[answer][1], result.result, room];
-        window.open("https://gremlins-api.reddit.com/room?nightmode=1","_self")
-        return 0;
-    } else if (flag >= 4){
-        let result = await submitAnswer(room.token, room.options[answer][0]);
-
-        return [room.options[answer][1], result.result, room];
-    }
+    return doc;
 };
-
-async function submitAnswerToDB(answer, result, room) {
-    let body = new FormData();
-    delete room.token;
-    body.append("answer", answer);
-    body.append("result", result);
-    body.append("room", JSON.stringify(room));
-    let res = await (await fetch("https://spacescience.tech/api.php", {
-        method: "post",
-        body
-    })).text();
-
-    return JSON.parse(res);
-}
-
-let timing = [];
 
 function getStats() {
     const sum = timing.reduce((a, b) => a + b, 0);
@@ -255,47 +304,62 @@ Loses: ${loses.length} (${((loses.length/(wins.length+loses.length))*100).toFixe
 `;
 }
 
-window.last = "INVALID";
-window.wins = []; window.loses = [];
-setInterval(async () => {
-    let t0 = performance.now();
-    let game = await play();
-    submitAnswerToDB(game[0].trim(), game[1], game[2]).then(
-        function (submit) {
-            let t1 = performance.now();
-            timing.push(t1 - t0);
-            game[0] = game[0].trim();
-            if(game[1] === "WIN") wins.push(game[0]);
-            else if(game[1] === "LOSE") loses.push(game[0]);
-            last = game[1];
-            if(game[1] === "WIN"){
-                Toastify({
-                    text: game[1] + ": "+ game[0],
-                    duration: 5000,
-                    newWindow: true,
-                    close: true,
-                    gravity: "top", // `top` or `bottom`
-                    position: 'left', // `left`, `center` or `right`
-                    backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
-                    stopOnFocus: false, // Prevents dismissing of toast on hover
-                }).showToast();
-            }
-            else if(game[1] === "LOSE"){
-                Toastify({
-                    text: game[1] + ": "+ game[0],
-                    duration: 5000,
-                    newWindow: true,
-                    close: true,
-                    gravity: "top", // `top` or `bottom`
-                    position: 'left', // `left`, `center` or `right`
-                    backgroundColor: "linear-gradient(to right, #e3392d, #6b110b)",
-                    stopOnFocus: false, // Prevents dismissing of toast on hover
-                }).showToast();
+async function play() {
+    'use strict';
+/*
+    if (window.location.pathname == '/results') {
+        window.location.pathname = '/room'
+        return
+    }*/
+
+    let doc = await getDocument();
+
+    const answerEls = doc.getElementsByTagName('gremlin-note')
+
+    var correctAnswerEls = await checkAnswersOcean(answerEls)
+
+    if (correctAnswerEls.length === 1) {
+        //correctAnswerEls[0].click()
+        await submitAnswer(correctAnswerEls[0], doc);
+
+    } else {
+        if (correctAnswerEls.length == 0) correctAnswerEls = answerEls
+        var correctAnswerEls2 = await checkAnswersSpacescience(correctAnswerEls)
+        if (correctAnswerEls2.length === 1) {
+            //correctAnswerEls2[0].click()
+            await submitAnswer(correctAnswerEls2[0], doc);
+
+        } else {
+            await submitReport(correctAnswerEls[0], doc);
+            // everything below has false positives
+
+            if (correctAnswerEls2.length == 0) correctAnswerEls2 = correctAnswerEls
+            var correctAnswerEls3 = await checkAnswersSneknet(correctAnswerEls2)
+            if (correctAnswerEls3.length === 1) {
+                //correctAnswerEls3[0].click()
+                await submitAnswer(correctAnswerEls3[0], doc);
+
+            } else {
+                if (correctAnswerEls3.length == 0) correctAnswerEls3 = correctAnswerEls2
+                var correctAnswerEls4 = await checkAnswersAbra(correctAnswerEls3)
+                if (correctAnswerEls4.length === 1) {
+                    //correctAnswerEls4[0].click()
+                    await submitAnswer(correctAnswerEls4[0], doc);
+
+                } else {
+                    const topCorrectAnswer = await getTopAbra(correctAnswerEls3)
+                    //topCorrectAnswer.style.borderColor = '#46D160'
+                    //topCorrectAnswer.click()
+                    await submitReport(correctAnswerEls[0], doc)
+                }
             }
         }
-    )
-}, 1200)
 
+
+    }
+}
+play();
+/*
 setInterval(() => {
     let curstatus = getStats();
 Toastify({
@@ -315,3 +379,4 @@ Toastify({
         document.getElementsByTagName("gremlin-app")[0].innerHTML = doc.getElementsByTagName("gremlin-app")[0].innerHTML;
     })
 }, 10000);
+*/
