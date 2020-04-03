@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Auto Imposter Bot
+// @name         Eva's Imposter Bot
 // @namespace    evaisa.nl
 // @version      0.1
 // @description  Plays r/imposter for you
@@ -202,7 +202,7 @@ async function submitReport(element, doc) {
         })).text();
     }
    // console.log(JSON.parse(res))
-    setTimeout(() => {window.open("https://gremlins-api.reddit.com/results?prev_result=WIN&nightmode=1","_self")}, 500)
+    setTimeout(() => {window.open("https://gremlins-api.reddit.com/results?prev_result=WIN&nightmode=1","_self")}, 200)
     //window.open("https://gremlins-api.reddit.com/room?nightmode=1&platform=desktop","_self");
 }
 
