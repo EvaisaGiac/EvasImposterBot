@@ -41,6 +41,29 @@ async function checkExistingAbra(msgs) {
     return json.results;
 }
 
+async function checkAnswersSneknet(answerEls) {
+    const r = await fetch('https://api.snakeroom.org/y20/query', {
+        method: 'POST',
+        body: JSON.stringify({
+            options: answerEls.map(answer => answer.innerHTML.trim()),
+        }),
+    })
+    const resp = await r.json()
+    const possibleAnswers = answerEls
+    for (const answer of resp.answers) {
+        const answerEl = answerEls[answer.i]
+        if (!answer.correct) {
+            var index = possibleAnswers.indexOf(answerEl)
+            answerEl.style.opacity = .1
+            if (index !== -1) possibleAnswers.splice(index, 1);
+        }
+    }
+
+    console.log(possibleAnswers)
+
+    return possibleAnswers
+}
+
 async function checkExistingSpacescience(id) {
     let requestOptions = {
         method: 'GET',
@@ -112,6 +135,21 @@ async function getRoom() {
 };
 
 
+async function submitReport(token, id) {
+    let our_body = "undefined=undefined&note_ids="+id+"&csrf_token="+token
+    let res = await (await fetch("https://gremlins-api.reddit.com/report_note", {
+        method: "post",
+        headers: {
+            'accept': 'gremlin/html',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            // 'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: our_body
+    })).text();
+
+    return JSON.parse(res);
+}
+
 
 async function submitAnswer(token, id) {
     let body = new FormData();
@@ -137,10 +175,14 @@ async function play() {
     let answer = 0,
         maxDetector = 0;
 
+    let answers = await checkAnswersSneknet(room.options)
+
+
    // let abraP = checkExistingAbra(room.options.flatMap(x => x[0]));
-    let spacP = Promise.all(room.options.flatMap(x => checkExistingSpacescience(x[0])));
-    let oceaP = Promise.all(room.options.flatMap(x => checkExistingOcean(x[1])));
+    let spacP = Promise.all(answers.flatMap(x => checkExistingSpacescience(x[0])));
+    let oceaP = Promise.all(answers.flatMap(x => checkExistingOcean(x[1])));
   //  let detecP = Promise.all(room.options.flatMap(x => checkDetector(x[1])));
+
     // cost of accuracy
 
     let [space, ocean] = await Promise.all([spacP, oceaP]);
@@ -151,10 +193,10 @@ async function play() {
 
      let flag = 0;
 
-    for (let i = 0; i < room.options.length; i++) {
+    for (let i = 0; i < answers.length; i++) {
         // o is id
         // z is string
-        let [o, z] = room.options[i];
+        let [o, z] = answers[i];
         if ( space[i] === "known fake" || ocean[i] == "known fake") {
             answer = i;
             break;
@@ -173,11 +215,17 @@ async function play() {
 
     // stuff for abusing report button, gets rate limited.
 
+    if (flag < 4){
+        let result = await submitReport(room.token, room.options[answer][0]);
 
+        return [room.options[answer][1], result.result, room];
+        window.open("https://gremlins-api.reddit.com/room?nightmode=1","_self")
+        return 0;
+    } else if (flag >= 4){
         let result = await submitAnswer(room.token, room.options[answer][0]);
 
         return [room.options[answer][1], result.result, room];
-
+    }
 };
 
 async function submitAnswerToDB(answer, result, room) {
